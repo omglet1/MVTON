@@ -1,0 +1,47 @@
+
+model:
+  base_learning_rate: 3e-05
+  target: ldm.models.diffusion.mask_generator.MaskLDM
+  params:
+    linear_start: 0.00085
+    linear_end: 0.0120
+    log_every_t: 200
+    timesteps: 1000
+    image_size: 64
+    channels: 4
+    u_cond_percent: 0.2
+    scale_factor: 0.18215
+    use_ema: False
+
+    unet_config:
+      target: ldm.modules.diffusionmodules.model.Model
+      params:
+        ch: 256
+        in_channels: 9    #TODO:按照是否是扩散模型进行调节
+        out_ch: 1
+        attn_resolutions: [ 4, 2, 1 ]
+        num_res_blocks: 2
+        ch_mult: [1, 2, 4, 4 ]
+        resolution: 2
+        use_timestep: False  ##TODO:按照是否是扩散模型进行调节
+        attn_type: "none"
+
+
+data:
+  target: train.DataModuleFromConfig
+  params:
+      batch_size: 2
+      wrap: False
+      train:
+          target: ldm.data.mask_vitonhd.OpenImageDataset_Mask
+          params:
+              state: train
+              dataset_dir: datasets/vitonhd
+
+lightning:
+  trainer:
+    max_epochs: 200
+    num_nodes: 1
+    profiler: "simple"
+    accelerator: 'ddp'
+    gpus: "0,1"
