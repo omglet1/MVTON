@@ -39,23 +39,66 @@ def disabled_train(self, mode=True):
 class MaskLDM(DDPM_Mask):
     def __init__(self,
                  run_dm = False,
+                 resoulution = 512,
                  scale_factore = 1.0,
                  *args, **kwargs):
         #initial  basic model and diffusion paremeters
         self.num_timesteps_cond = 1  #TODO: If wouldn't use, delete
         super().__init__(*args, **kwargs)
+        self.run_dm = run_dm
 
         self.sigmoid = nn.Sigmoid()
 
+        self.stem = nn.Sequential(
+            nn.Conv2d(9, 64, 7, 2, 3),
+            nn.GroupNorm(32, 64),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, 3, 1, 1),
+            nn.GroupNorm(32, 64),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 128, 3, 1, 1),
+            nn.GroupNorm(32, 128),
+            nn.ReLU(inplace=True),
+            nn.AdaptiveAvgPool2d(resoulution // 4))
+        
+
+        if self.run_dm == True:
+            self.stem_z = nn.Sequential(
+                nn.Conv2d(1, 32, 7, 2, 3),
+                nn.GroupNorm(32, 32),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(32, 32, 3, 1, 1),
+                nn.GroupNorm(32, 32),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(32, 32, 3, 1, 1),
+                nn.GroupNorm(32, 32),
+                nn.ReLU(inplace=True),
+                nn.AdaptiveAvgPool2d(resoulution // 4)               
+            )
+
+        
+        self.final_out = nn.Sequential(
+            nn.ConvTranspose2d(128, 64, 4, 2, 1, 0),
+            nn.GroupNorm(32, 64),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, 3, 1, 1),
+            nn.GroupNorm(32, 64),
+            nn.ReLU(inplace=True),            
+            nn.ConvTranspose2d(64, 32, 4, 2, 1, 0),
+            nn.GroupNorm(32, 32),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(32, 1, 1)
+        )
+
         #control parameters
-        self.run_dm = run_dm
         self.scale_factor = scale_factore
+
 
 
     #训练
     def training_step(self, batch, batch_idx):
-        garment, hint, mask = self.get_input(batch)     #加载数据
-        loss = self(garment, hint, mask)                #计算损失
+        mask, garment, hint, __ = self.get_input(batch)     #加载数据
+        loss = self(mask, garment, hint)                #计算损失
         self.log("loss",                                            # 记录损失
                      loss,                                  
                      prog_bar=True,
@@ -79,13 +122,14 @@ class MaskLDM(DDPM_Mask):
         gt = batch['GT']
         garment = batch['garment']
         hint = batch['hint']
+        name = batch['name']
 
         #数据格式
         gt = gt.to(memory_format=torch.contiguous_format).float()  
         garment = garment.to(memory_format=torch.contiguous_format).float()  
         hint = hint.to(memory_format=torch.contiguous_format).float()   
 
-        out = [gt, garment, hint]
+        out = [gt, garment, hint, name]
 
         return out     
         
@@ -103,12 +147,17 @@ class MaskLDM(DDPM_Mask):
         garment: [B,3,H,W]
         hint:    [B,6,H,W]
         """
-        output = self.model(garment, t = None, context = hint)
-        loss = torch.binary_cross_entropy_with_logits(output, gt)
+        x = torch.cat((garment, hint), dim=1)
+        x = self.stem(x)
+        output = self.model(x, timesteps = None, control = None)
+        output = self.final_out(output)
+        loss = F.binary_cross_entropy_with_logits(output, gt, reduction='mean')
         return loss
     
     def forward_dm(self, gt, garment, hint):
         """
+        #暂时搁置
+
         gt:      [B,1,H,W]
         garment: [B,3,H,W]
         hint:    [B,6,H,W]
@@ -123,9 +172,15 @@ class MaskLDM(DDPM_Mask):
         noise = torch.randn_like(z)
         z_noise = self.q_sample(x_start=z, t = t, noise = noise)
         z_noise = torch.cat((z_noise, garment), dim=1)
+        z_noise = self.stem_z(z_noise)
+
+        #处理数据
+        hint = self.stem(hint)
 
         #预测噪声
         output = self.model(z_noise, t, hint)
+
+        output = self.final_out(output)
 
         #计算损失
         loss = self.get_loss(output, noise)
@@ -143,8 +198,11 @@ class MaskLDM(DDPM_Mask):
 
     #采样（预测）
     @torch.no_grad()
-    def predict(self, batch, ddim_steps=50, ddim_eta=0.):
-        __, garment, hint = self.get_input(batch)
+    def predict(self, batch, ddim_steps=50, ddim_eta=0. ,device=None):
+        __, garment, hint, name = self.get_input(batch)
+        garment = garment.to(device)
+        hint = hint.to(device)
+
 
         if self.run_dm == False:
             output = self.demo_unet(garment, hint)
@@ -155,24 +213,34 @@ class MaskLDM(DDPM_Mask):
 
         output = torch.round(output)
 
-        return output
+        return output, name
     
     def demo_unet(self, garment, hint):
-        output = self.model(garment, t = None, context = hint)
+        x = torch.cat((garment, hint), dim=1)
+        x = self.stem(x)
+        output = self.model(x, timesteps = None, control = None)
+        output = self.final_out(output)
         return output
 
         
     def demo_dm(self, garment, hint, ddim_steps=50, ddim_eta=0.):
         ddim_sampler = DDIMSampler_Mask(self)    #TODO:添加扩散模型计划
-        shape = (self.channels, self.image_size, self.image_size) 
+        shape = (garment.shape[0], self.channels, self.image_size, self.image_size) 
+        noise = torch.rand_like(shape)
+
+        hint = torch.cat((garment, hint), dim=1)
+
         samples, __ =ddim_sampler(ddim_steps,
                                   garment.shape[0],
-                                  shape,
                                   hint,
-                                  garment,
+                                  stem = self.stem,
+                                  stem_z = self.stem_z,
+                                  final = self.final_out,
+                                  x_T = noise,
                                   verbose=False, 
                                   eta=ddim_eta)
 
+        samples = self.final_out(samples)
 
         x_samples = 1. / self.scale_factor * samples
         x_samples = torchvision.transforms.Resize([512, 512])(x_samples)

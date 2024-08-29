@@ -76,6 +76,7 @@ class DDPM_Mask(pl.LightningModule):
         self.loss_type = loss_type
         self.learn_logvar = learn_logvar
         self.logvar = torch.full(fill_value=logvar_init, size=(self.num_timesteps,))
+    
 
     def register_schedule(self, 
                           beta_schedule="linear", 
@@ -140,4 +141,3 @@ class DDPM_Mask(pl.LightningModule):
         else:
             loss = torch.nn.functional.mse_loss(target, pred, reduction='none')
         return loss
-

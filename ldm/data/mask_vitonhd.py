@@ -1,4 +1,4 @@
-"""该"""
+"""该函数仅用于mask 生成器的训练与测试"""
 
 import os
 import torch
@@ -47,19 +47,22 @@ class OpenImageDataset_Mask(data.Dataset):
     def __getitem__(self, index):
 
         person, garment = self.dataset_list[index]
+        mask_num = str(person[:-6]+garment[:-7])
 
         # 确定路径
         reference_path = os.path.join(self.dataset_dir, self.state, "cloth", garment)            #garment
-        mask_path = os.path.join(self.dataset_dir, self.state, "gt_cloth_warped_mask", person)   #mask                       
+        if self.state == 'train':
+            mask_path = os.path.join(self.dataset_dir, self.state, "gt_cloth_warped_mask", person)   #mask    
+        else:
+            mask_path = os.path.join(self.dataset_dir, self.state, "cloth-mask", person)   #mask                    
         densepose_path = os.path.join(self.dataset_dir, self.state, "image-densepose", person)   #densepose
         keypoint_path = os.path.join(self.dataset_dir, self.state, "openpose_img", person[:-4]+"_rendered.png" )   #keypoint
         
         # 加载图像 RGB形式读取图像并处理为tensor
-        refernce = Image.open(reference_path).convert("RGB").resize((224, 224))  #图像：224x224
+        refernce = Image.open(reference_path).convert("RGB").resize((512, 512))  #图像：224x224
         refernce = torchvision.transforms.ToTensor()(refernce)
         mask = Image.open(mask_path).convert("L").resize((512, 512))  #图像：512x152
         mask = torchvision.transforms.ToTensor()(mask)
-        mask = 1-mask
         densepose = Image.open(densepose_path).convert("RGB").resize((512, 512))  #图像：512x512
         densepose = torchvision.transforms.ToTensor()(densepose)
         keypoint = Image.open(keypoint_path).convert("RGB").resize((512, 512))  #图像：512x512
@@ -72,11 +75,11 @@ class OpenImageDataset_Mask(data.Dataset):
         keypoint = torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))(keypoint)
 
         # 处理garment
-        refernce = torchvision.transforms.Resize((512, 512))(refernce) #提示图像 衣物+densepose
+        #refernce = torchvision.transforms.Resize((512, 512))(refernce) #提示图像 衣物
         hint = torch.cat((densepose, keypoint), dim = 0)
 
         return {"GT": mask,                 # [1, 512, 512] Mask
                 "garment": refernce,        # [3, 512, 512] garment
-                "hint": hint,               # [6, 512, 512] densepose  keypoint          
+                "hint": hint,               # [6, 512, 512] densepose  keypoint   
+                "name": mask_num       
                 }
-

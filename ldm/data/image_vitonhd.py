@@ -52,7 +52,8 @@ class OpenImageDataset(data.Dataset):
         # 确定路径
         img_path = os.path.join(self.dataset_dir, self.state, "image", person)
         reference_path = os.path.join(self.dataset_dir, self.state, "cloth", garment)
-        mask_path = os.path.join(self.dataset_dir, self.state, "mask", person[:-4]+".png")                              
+
+        mask_path = os.path.join(self.dataset_dir, self.state, "agnostic-mask", person[:-4]+"_mask.png")        #按需求修改                      
         densepose_path = os.path.join(self.dataset_dir, self.state, "image-densepose", person)
         
         # 加载图像 RGB形式读取图像并处理为tensor
@@ -62,13 +63,14 @@ class OpenImageDataset(data.Dataset):
         refernce = torchvision.transforms.ToTensor()(refernce)
         mask = Image.open(mask_path).convert("L").resize((512, 512))  #图像：512x152
         mask = torchvision.transforms.ToTensor()(mask)
-        mask = 1-mask
+        mask = 1-mask   #最大的问题在于为何要调转色差  理由：目的是为了可以是inpaint图像保留衣物无关区域
         densepose = Image.open(densepose_path).convert("RGB").resize((512, 512))  #图像：512x512
         densepose = torchvision.transforms.ToTensor()(densepose)
 
         #如果采用多数值掩码，则需要对数据进行额外操作
         if self.mask_mv != None:
-            mask_gen_path = os.path.join(self.dataset_dir, self.state, self.mask_mv, person[:-4]+".png")
+            pair_name = person[:-6]+garment[:-7]
+            mask_gen_path = os.path.join(self.dataset_dir, self.state, self.mask_mv, pair_name+".png")
             mask_gen = Image.open(mask_gen_path).convert("L").resize((512, 512))
             mask_gen = torchvision.transforms.ToTensor()(mask_gen)
             mask_gen = 1-mask_gen
@@ -103,13 +105,13 @@ class OpenImageDataset(data.Dataset):
         """
         需要实现两个功能：
         1、将两个掩码合并,生成总的掩码覆盖范围
-        2、按照逻辑构建一个多数值的掩码, 0表示不修改,1表示与背景同步,2表示生成的服饰区域
+        2、按照逻辑构建一个多数值的掩码,
         """
         #获取全部的掩码遮挡区域
-        mask_sum = torch.logical_or(Mask_person, Mask_person)
+        mask_sum = torch.logical_and(Mask_person, Mask_person)
 
         #获取多数值掩码
-        Mask_garment = Mask_garment * 2
-        mask_mv = torch.max((Mask_garment, Mask_person))
+        Mask_person = Mask_person + 1
+        mask_mv = torch.min((Mask_garment, Mask_person))
 
         return mask_sum, mask_mv

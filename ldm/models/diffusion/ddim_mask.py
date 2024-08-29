@@ -60,9 +60,12 @@ class DDIMSampler_Mask(object):
     def sample(self,
                S,
                batch_size,
-               shape,
+               noise,
                pose,
-               conditioning=None,
+               stem,
+               stem_z,
+               final,
+               conditioning,
                callback=None,
                normals_sequence=None,
                img_callback=None,
@@ -92,11 +95,10 @@ class DDIMSampler_Mask(object):
 
         self.make_schedule(ddim_num_steps=S, ddim_eta=eta, verbose=verbose)
         # sampling
-        C, H, W = shape
-        size = (batch_size, C, H, W)
+        size = noise.shape
         print(f'Data shape for DDIM sampling is {size}, eta {eta}')
 
-        samples, intermediates = self.ddim_sampling(conditioning, size, pose,
+        samples, intermediates = self.ddim_sampling(conditioning, size, pose, stem, stem_z, final,
                                                     callback=callback,
                                                     img_callback=img_callback,
                                                     quantize_denoised=quantize_x0,
@@ -116,7 +118,7 @@ class DDIMSampler_Mask(object):
 
 
     @torch.no_grad()
-    def ddim_sampling(self, cond, shape, pose,
+    def ddim_sampling(self, cond, shape, pose, stem, stem_z, final,
                       x_T=None, ddim_use_original_steps=False,
                       callback=None, timesteps=None, quantize_denoised=False,
                       mask=None, x0=None, img_callback=None, log_every_t=100,
@@ -150,7 +152,7 @@ class DDIMSampler_Mask(object):
             index = total_steps - i - 1
             ts = torch.full((b,), step, device=device, dtype=torch.long)
 
-            outs = self.p_sample_ddim(img, cond, ts, pose, index=index, use_original_steps=ddim_use_original_steps,
+            outs = self.p_sample_ddim(img, cond, ts, pose, stem, stem_z, final,  index=index, use_original_steps=ddim_use_original_steps,
                                       quantize_denoised=quantize_denoised, temperature=temperature,
                                       noise_dropout=noise_dropout, score_corrector=score_corrector,
                                       corrector_kwargs=corrector_kwargs,
@@ -167,15 +169,18 @@ class DDIMSampler_Mask(object):
         return img, intermediates
 
     @torch.no_grad()
-    def p_sample_ddim(self, x, c, t, pose, index, repeat_noise=False, use_original_steps=False, quantize_denoised=False,
+    def p_sample_ddim(self, x, c, t, pose, stem, stem_z, final, index, repeat_noise=False, use_original_steps=False, quantize_denoised=False,
                       temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None,
                       unconditional_guidance_scale=1., unconditional_conditioning=None,**kwargs):
         b, *_, device = *x.shape, x.device
 
 
         if unconditional_conditioning is None or unconditional_guidance_scale == 1.:
-            z = torch.cat((x, c), dim=1)
-            e_t = self.model.model(z, t, pose)
+            x = stem_z(x)
+            pose = stem(pose)
+            z = torch.cat((x, pose), dim=1)
+            e_t = self.model.model(z, t)
+            e_t = final(e_t)
 
         else:  #这个地方不会调用
             x_in = torch.cat([x] * 2)

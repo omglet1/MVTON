@@ -1,4 +1,4 @@
-#UNet 掩码生成器训练
+#UNet 掩码生成器测试  Vithonhd
 model:
   base_learning_rate: 3e-05
   target: ldm.models.diffusion.mask_generator.MaskLDM
@@ -28,19 +28,18 @@ model:
 
 
 data:
-  target: train.DataModuleFromConfig
+  target: test.DataModuleFromConfig
   params:
-      batch_size: 2
+      batch_size: 1
       wrap: False
-      train:
+      test:
           target: ldm.data.mask_vitonhd.OpenImageDataset_Mask
           params:
-              state: train
+              state: test
               dataset_dir: datasets/vitonhd
 
 lightning:
   trainer:
-    max_epochs: 200
     num_nodes: 1
     profiler: "simple"
     accelerator: 'ddp'

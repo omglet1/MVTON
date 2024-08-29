@@ -78,12 +78,11 @@ if __name__ == "__main__":
     # 加载 model
     # =============================================================
     model = instantiate_from_config(config.model)
-    model.load_state_dict(torch.load(opt.ckpt, map_location="cpu")["state_dict"], strict=False)
+    #model.load_state_dict(torch.load(opt.ckpt, map_location="cpu")["state_dict"], strict=False)
     model.cuda()
     model.eval()
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     model = model.to(device)
-    sampler = DDIMSampler_Mask(model)
 
     # =============================================================
     # 设置精度
@@ -102,30 +101,17 @@ if __name__ == "__main__":
             for i,batch in enumerate(data.dataloader):
                 # 加载数据
 
-                truth = batch["GT"].to(torch.float16).to(device)
-                hint = batch["hint"].to(torch.float16).to(device)
-                garment = batch["garment"].to(torch.float16).to(device)
+                x_samples, name = model.predict(batch, opt.ddim, 0, device)
 
+                if model.run_dm == True:
+                    x_samples_ddim = torch.clamp((x_samples + 1.0) / 2.0, min=0.0, max=1.0)
+                    x_samples_ddim = x_samples_ddim.cpu().permute(0, 2, 3, 1).numpy()
+                    x_checked_image=x_samples_ddim
+                else:
+                    x_checked_image = x_samples.cpu().permute(0, 2, 3, 1).numpy()
 
-                # 数据处理
-
-
-                shape = (model.channels, model.image_size, model.image_size)
-                # 预测结果
-                samples, _ = sampler.sample(S=opt.ddim,
-                                                 batch_size=1,
-                                                 shape=shape,
-                                                 pose=hint,
-                                                 conditioning=garment,
-                                                 verbose=False,
-                                                 eta=0)
-                samples = 1. / model.scale_factor * samples
-                x_samples = model.first_stage_model.decode(samples[:,:4,:,:])
-
-                x_samples_ddim = torch.clamp((x_samples + 1.0) / 2.0, min=0.0, max=1.0)
-                x_samples_ddim = x_samples_ddim.cpu().permute(0, 2, 3, 1).numpy()
-                x_checked_image=x_samples_ddim
-                x_checked_image_torch = torch.from_numpy(x_checked_image).permute(0, 3, 1, 2)                
+                x_checked_image_torch = torch.from_numpy(x_checked_image).permute(0, 3, 1, 2)   #B,C,H,W  
+                        
                 # 保存图像
                 all_img=[]
                 # all_img.append(un_norm(truth[0]).cpu())
@@ -139,6 +125,7 @@ if __name__ == "__main__":
 
                 grid = torch.stack(all_img, 0)
                 grid = torchvision.utils.make_grid(grid)
+                #grid = grid[0]
                 grid = 255. * rearrange(grid, 'c h w -> h w c').cpu().numpy()
                 img = Image.fromarray(grid.astype(np.uint8))
-                img.save("results/generate_mask/"+str(i).rjust(5,"0")+"_00.png")
+                img.save("results/generate_mask/"+name[0]+".png")
