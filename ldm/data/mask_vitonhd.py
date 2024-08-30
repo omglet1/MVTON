@@ -1,4 +1,7 @@
-"""该函数仅用于mask 生成器的训练与测试"""
+"""
+该函数仅用于mask 生成器的训练与测试
+目标数据集是VitonHD
+"""
 
 import os
 import torch

@@ -1,3 +1,8 @@
+"""
+该方法是用于cat-dm 虚拟视觉试衣模型的训练与测试
+额外添加了一个初始化参数 mask_mv是用于获取不同掩码生成的结果
+"""
+
 import os
 import torch
 import torchvision
@@ -10,7 +15,7 @@ from PIL import Image
 class OpenImageDataset(data.Dataset):
     def __init__(self, state, dataset_dir, type="paired", mask_mv = None):
         """mask_mv: 控制是否采用多数值掩码,其内容是生成掩码的路径
-                    defauklt: None , 'mask_unet' , 'mask_dm'"""
+                    defauklt: None , 'mask_unet_pair' ,'mask_unet_unpair'. 'mask_dm_pair',  'mask_dm_unpair'"""
         self.state=state  #训练还是测试
         self.mask_mv = mask_mv # 是否采用多数值掩码
         self.dataset_dir = dataset_dir  #数据集路径
@@ -106,12 +111,30 @@ class OpenImageDataset(data.Dataset):
         需要实现两个功能：
         1、将两个掩码合并,生成总的掩码覆盖范围
         2、按照逻辑构建一个多数值的掩码,
+
+        注意: 两个掩码都是0代表目标衣物, 1代表背景与其他人物部分
+        mask_person : 人物图像检测得到的衣物掩码
+        mask_garment: 目标衣物图像对应到人身上的图像
         """
         #获取全部的掩码遮挡区域
-        mask_sum = torch.logical_and(Mask_person, Mask_person)
+        mask_sum = torch.logical_and(Mask_person, Mask_garment)
+
+        mask_mv = torch.zeros_like(mask_sum)
+
+        C, H, W =mask_mv.shape
 
         #获取多数值掩码
-        Mask_person = Mask_person + 1
-        mask_mv = torch.min((Mask_garment, Mask_person))
+        for i in range(H):
+            for j in range(W):
+                value_person = Mask_person[0,i,j]
+                value_garment = Mask_garment[0,i,j]
+
+                if value_garment == 0:
+                    mask_mv[0,i,j] = 0
+                else:
+                    if value_person == 0:
+                        mask_mv[0,i,j] = 1
+                    else :
+                        mask_mv[0,i,j] = 2
 
         return mask_sum, mask_mv

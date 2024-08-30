@@ -39,6 +39,7 @@ def disabled_train(self, mode=True):
 class MaskLDM(DDPM_Mask):
     def __init__(self,
                  run_dm = False,
+                 hint_channel = 3,
                  resoulution = 512,
                  scale_factore = 1.0,
                  *args, **kwargs):
@@ -49,8 +50,13 @@ class MaskLDM(DDPM_Mask):
 
         self.sigmoid = nn.Sigmoid()
 
+        if run_dm == False:
+            stem_channel = 3 + hint_channel
+        else:
+            stem_channel = hint_channel
+
         self.stem = nn.Sequential(
-            nn.Conv2d(9, 64, 7, 2, 3),
+            nn.Conv2d(hint_channel, 64, 7, 2, 3),
             nn.GroupNorm(32, 64),
             nn.ReLU(inplace=True),
             nn.Conv2d(64, 64, 3, 1, 1),
@@ -232,6 +238,7 @@ class MaskLDM(DDPM_Mask):
 
         samples, __ =ddim_sampler(ddim_steps,
                                   garment.shape[0],
+                                  noise,
                                   hint,
                                   stem = self.stem,
                                   stem_z = self.stem_z,
