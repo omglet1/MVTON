@@ -55,7 +55,7 @@ class OpenImageDataset(data.Dataset):
     def __getitem__(self, index):
 
         #提取服饰类别属性
-        categoty = self.category_list[index]
+        category = self.category_list[index]
 
         #各类数据的路径
         people_path = self.people_list[index]   #人物路径

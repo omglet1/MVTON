@@ -10,6 +10,9 @@ import torch.utils.data as data
 import torchvision.transforms.functional as F
 from PIL import Image
 
+from einops import rearrange
+import numpy as np
+
 #加载VITON-HD
 
 class OpenImageDataset(data.Dataset):
@@ -74,8 +77,12 @@ class OpenImageDataset(data.Dataset):
 
         #如果采用多数值掩码，则需要对数据进行额外操作
         if self.mask_mv != None:
-            pair_name = person[:-6]+garment[:-7]
-            mask_gen_path = os.path.join(self.dataset_dir, self.state, self.mask_mv, pair_name+".png")
+            #如果是网络生成的用这个
+            #pair_name = person[:-6]+garment[:-7]
+            #mask_gen_path = os.path.join(self.dataset_dir, self.state, self.mask_mv, pair_name+".jpg")
+            #如果是直接使用GT_Mask的，使用以下代码
+            mask_gen_path = os.path.join(self.dataset_dir, self.state, self.mask_mv, person)
+
             mask_gen = Image.open(mask_gen_path).convert("L").resize((512, 512))
             mask_gen = torchvision.transforms.ToTensor()(mask_gen)
             mask_gen = 1-mask_gen
@@ -117,7 +124,7 @@ class OpenImageDataset(data.Dataset):
         mask_garment: 目标衣物图像对应到人身上的图像
         """
         #获取全部的掩码遮挡区域
-        mask_sum = torch.logical_and(Mask_person, Mask_garment)
+        mask_sum = torch.min(Mask_person, Mask_garment)
 
         mask_mv = torch.zeros_like(mask_sum)
 
@@ -136,5 +143,14 @@ class OpenImageDataset(data.Dataset):
                         mask_mv[0,i,j] = 1
                     else :
                         mask_mv[0,i,j] = 2
+        
+        #save_sum = torch.squeeze(mask_sum, dim=0)
+        #save_sum = 255 * save_sum.cpu().numpy()
+        #save_sum = Image.fromarray(save_sum.astype(np.uint8))
+        #save_sum.save("test_image_sum.png")
 
+        #save_mv =   torch.squeeze(mask_mv, dim=0)         
+        #save_mv = 127 * save_mv.cpu().numpy()
+        #save_mv = Image.fromarray(save_mv.astype(np.uint8))
+        #save_mv.save("test_image.png")
         return mask_sum, mask_mv

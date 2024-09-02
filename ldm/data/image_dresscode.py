@@ -151,4 +151,13 @@ class OpenImageDataset(data.Dataset):
                     else :
                         mask_mv[0,i,j] = 2
 
+        #save_sum = torch.squeeze(mask_sum, dim=0)
+        #save_sum = 255 * save_sum.cpu().numpy()
+        #save_sum = Image.fromarray(save_sum.astype(np.uint8))
+        #save_sum.save("test_image_sum.png")
+
+        #save_mv =   torch.squeeze(mask_mv, dim=0)         
+        #save_mv = 127 * save_mv.cpu().numpy()
+        #save_mv = Image.fromarray(save_mv.astype(np.uint8))
+        #save_mv.save("test_image.png")
         return mask_sum, mask_mv

@@ -74,14 +74,14 @@ model:
 data:
   target: train.DataModuleFromConfig
   params:
-      batch_size: 2
+      batch_size: 1
       wrap: False
       train:
           target: ldm.data.image_vitonhd.OpenImageDataset
           params:
               state: train
               dataset_dir: datasets/vitonhd
-              mask_mv: mask_unet
+              mask_mv: gt_cloth_warped_mask        #衣物的贴合掩码
 
 
 lightning:
@@ -90,4 +90,4 @@ lightning:
     num_nodes: 1
     profiler: "simple"
     accelerator: 'ddp'
-    gpus: "0,1"
+    gpus: "0"
