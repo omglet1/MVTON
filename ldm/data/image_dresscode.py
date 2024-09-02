@@ -84,12 +84,13 @@ class OpenImageDataset(data.Dataset):
 
         #TODO:这个地方可能根据全局情况进行一定修改
         #当前是假设每类衣物都有自己的mask_gen_path
-        if self.mv != None:
-            mask_name = people_path[-12:-5]+clothes_path[-12:-6]
-            mask_gen_path = os.path.join(people_path.replace('images', self.mask_mv)[:-12], mask_name, ".png")
+        if self.mask_mv != None:
+            #mask_name = people_path[-12:-5]+clothes_path[-12:-6]
+            mask_gen_path = people_path.replace('images', self.mask_mv)
+            mask_gen_path = mask_gen_path.replace('jpg', 'png')
             mask_gen = Image.open(mask_gen_path).convert("L").resize((512, 512))
-            mask_gen = torchvision.transforms.ToTensor()(mask)
-            mask_gen = 1-mask
+            mask_gen = torchvision.transforms.ToTensor()(mask_gen)
+            mask_gen = 1-mask_gen
         else:
             pass            
 
@@ -131,7 +132,7 @@ class OpenImageDataset(data.Dataset):
         mask_garment: 目标衣物图像对应到人身上的图像
         """
         #获取全部的掩码遮挡区域
-        mask_sum = torch.logical_and(Mask_person, Mask_garment)
+        mask_sum = torch.min(Mask_person, Mask_garment)
 
         mask_mv = torch.zeros_like(mask_sum)
 
@@ -151,13 +152,4 @@ class OpenImageDataset(data.Dataset):
                     else :
                         mask_mv[0,i,j] = 2
 
-        #save_sum = torch.squeeze(mask_sum, dim=0)
-        #save_sum = 255 * save_sum.cpu().numpy()
-        #save_sum = Image.fromarray(save_sum.astype(np.uint8))
-        #save_sum.save("test_image_sum.png")
-
-        #save_mv =   torch.squeeze(mask_mv, dim=0)         
-        #save_mv = 127 * save_mv.cpu().numpy()
-        #save_mv = Image.fromarray(save_mv.astype(np.uint8))
-        #save_mv.save("test_image.png")
         return mask_sum, mask_mv
