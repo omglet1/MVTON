@@ -76,13 +76,13 @@ class Mask_Unet(pl.LightningModule):
         
         
         self.final_out = nn.Sequential(
-            nn.ConvTranspose2d(128, 64, 4, 2, 1, 0),
+            nn.Conv2d(128, 64, 3, 1, 1),
             nn.GroupNorm(32, 64),
             nn.ReLU(inplace=True),
             nn.Conv2d(64, 64, 3, 1, 1),
             nn.GroupNorm(32, 64),
             nn.ReLU(inplace=True),            
-            nn.ConvTranspose2d(64, 32, 4, 2, 1, 0),
+            nn.Conv2d(64, 32, 3, 1, 1),
             nn.GroupNorm(32, 32),
             nn.ReLU(inplace=True),
             nn.Conv2d(32, 2, 1)
@@ -95,7 +95,7 @@ class Mask_Unet(pl.LightningModule):
 
     #训练
     def training_step(self, batch, batch_idx):
-        mask, garment, hint, __ = self.get_input(batch)     #加载数据
+        mask, garment, hint, __, __ = self.get_input(batch)     #加载数据
         loss = self(mask, garment, hint)                #计算损失
         self.log("loss",                                            # 记录损失
                      loss,                                  
@@ -121,13 +121,14 @@ class Mask_Unet(pl.LightningModule):
         garment = batch['garment']
         hint = batch['hint']
         name = batch['name']
+        category = batch['category']
 
         #数据格式
         gt = gt.to(memory_format=torch.contiguous_format).float()  
         garment = garment.to(memory_format=torch.contiguous_format).float()  
         hint = hint.to(memory_format=torch.contiguous_format).float()   
 
-        out = [gt, garment, hint, name]
+        out = [gt, garment, hint, name, category]
 
         return out     
         
@@ -136,7 +137,7 @@ class Mask_Unet(pl.LightningModule):
 
         x = self.stem(garment)
         x = x + self.stem_hint(hint)
-        output = self.model(x, timesteps = None, control = None)
+        output = self.model(x, t = None, context = None)
         output = self.final_out(output)
         
         loss = self.criterion(output, gt)
@@ -148,15 +149,15 @@ class Mask_Unet(pl.LightningModule):
     def configure_optimizers(self):
         # 学习率设置
         lr = self.learning_rate
-        params =list(self.model.parameters())
-        opt = torch.optim.AdamW(params, lr=lr,betas=(0.9, 0.999), weight_decay=0.01,)
+        #params =list(self.model.parameters()) + list(self.stem.parameters()) + list(self.stem_hint.parameters()) + list(self.final_out.parameters())
+        opt = torch.optim.AdamW(list(self.parameters()), lr=lr,betas=(0.9, 0.999), weight_decay=0.01,)
 
         return opt
 
     #采样（预测）
     @torch.no_grad()
     def predict(self, batch, ddim_steps=50, ddim_eta=0. ,device=None):
-        __, garment, hint, name = self.get_input(batch)
+        __, garment, hint, name, category = self.get_input(batch)
         garment = garment.to(device)
         hint = hint.to(device)
 
@@ -164,11 +165,9 @@ class Mask_Unet(pl.LightningModule):
         x = x + self.stem_hint(hint)
 
 
-        output = self.model(x, timesteps = None, control = None)
+        output = self.model(x, t = None, context = None)
+        output = self.final_out(output)
         output = F.softmax(output, dim=1)
         output = torch.argmax(output, dim=1, keepdim=True)
-        return output, name
+        return output, name, category
 
-
-
-        

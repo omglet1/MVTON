@@ -79,20 +79,21 @@ class OpenImageDataset(data.Dataset):
         # 加载图像
 
         #衣物图像
-        refernce = Image.open(clothes_path).convert("RGB").resize((256, 256))
+        refernce = Image.open(clothes_path).convert("RGB").resize((512,512))
         refernce = torchvision.transforms.ToTensor()(refernce)
 
         #分割图像并处理成相应的掩码
-        mask = Image.open(mask_path).convert("L").resize((64, 64))
+        mask = Image.open(mask_path).convert("L").resize((128, 128))
         mask = torchvision.transforms.ToTensor()(mask)
+        mask = self.get_target(mask)
 
         #densepose
         densepose = np.load(dense_path)
         densepose = torch.from_numpy(densepose['uv'])
-        densepose = torch.nn.functional.interpolate(densepose.unsqueeze(0), size=(256, 256), mode='bilinear', align_corners=True).squeeze(0)
+        densepose = torch.nn.functional.interpolate(densepose.unsqueeze(0), size=(512,512), mode='bilinear', align_corners=True).squeeze(0)
 
         #skeleton
-        skeleton = Image.open(skeleton_path).convert("RGB").resize((256, 256))
+        skeleton = Image.open(skeleton_path).convert("RGB").resize((512,512))
         skeleton = torchvision.transforms.ToTensor(skeleton)
 
         
@@ -109,5 +110,18 @@ class OpenImageDataset(data.Dataset):
         return {"GT": mask,                  # [1, 512, 512] Mask
                 "garment": refernce,         # [3, 224, 224] Garment
                 "hint": hint,                # [5, 512, 512] Densepose keypoint
-                "name": mask_num
+                "name": mask_num,
+                "category": category
                 }
+    
+    def get_target(self, mask):
+        mask_zero = torch.zeros_like(mask)
+        mask_zero = mask_zero.repeat(2, 1, 1)  #[2, H, W]
+        C,H,W = mask.shape
+        for i in range(H):
+            for j in range(W):
+                if mask[0, i, j] == 0:
+                    mask_zero[0, i, j] = 1
+                else:
+                    mask_zero[1, i, j] = 1
+        return mask_zero

@@ -215,7 +215,7 @@ if __name__ == "__main__":
     # Use config.model["params"] to initialize config.model["target"]
     model = instantiate_from_config(config.model)
     # Load pre-trained model weights
-    model.load_state_dict(torch.load(opt.pretrained_model, map_location='cpu'), strict=False)
+    #model.load_state_dict(torch.load(opt.pretrained_model, map_location='cpu'), strict=False)
 
 
     # =============================================================

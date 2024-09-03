@@ -56,6 +56,7 @@ if __name__ == "__main__":
     parser.add_argument("-c", "--ckpt", type=str, default="./model.ckpt")
     parser.add_argument("-s", "--seed", type=int, default=42)
     parser.add_argument("-d", "--ddim", type=int, default=64)
+    parser.add_argument("-v", "--version", type=str, default="vitonhd")  #或是dresscode
     opt = parser.parse_args()
 
     # =============================================================
@@ -78,7 +79,7 @@ if __name__ == "__main__":
     # 加载 model
     # =============================================================
     model = instantiate_from_config(config.model)
-    #model.load_state_dict(torch.load(opt.ckpt, map_location="cpu")["state_dict"], strict=False)
+    model.load_state_dict(torch.load(opt.ckpt, map_location="cpu")["state_dict"], strict=False)
     model.cuda()
     model.eval()
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -92,23 +93,32 @@ if __name__ == "__main__":
     # =============================================================
     # 开始测试
     # =============================================================
-    if os.path.exists("results/generate_mask") == False:
-        os.makedirs("results/generate_mask")
-
+    if opt.version == "vitonhd":
+        if os.path.exists("results/generate_mask") == False:
+            os.makedirs("results/generate_mask")
+    elif opt.version == "dresscode":
+        if os.path.exists("results/generate_mask/dresses") == False:
+            os.makedirs("results/generate_mask/dresses")
+        if os.path.exists("results/generate_mask/upper_body") == False:
+            os.makedirs("results/generate_mask/upper_body")
+        if os.path.exists("results/generate_mask/lower_body") == False:
+            os.makedirs("results/generate_mask/lower_body")
 
     with torch.no_grad():
         with precision_scope("cuda"):
             for i,batch in enumerate(data.dataloader):
                 # 加载数据
 
-                x_samples, name = model.predict(batch, opt.ddim, 0, device)
+                x_samples, name, category = model.predict(batch, opt.ddim, 0, device)
 
-                if model.run_dm == True:
-                    x_samples_ddim = torch.clamp((x_samples + 1.0) / 2.0, min=0.0, max=1.0)
-                    x_samples_ddim = x_samples_ddim.cpu().permute(0, 2, 3, 1).numpy()
-                    x_checked_image=x_samples_ddim
-                else:
-                    x_checked_image = x_samples.cpu().permute(0, 2, 3, 1).numpy()
+                #if model.run_dm == True:
+                #    x_samples_ddim = torch.clamp((x_samples + 1.0) / 2.0, min=0.0, max=1.0)
+                #    x_samples_ddim = x_samples_ddim.cpu().permute(0, 2, 3, 1).numpy()
+                #    x_checked_image=x_samples_ddim
+                #else:
+                #    x_checked_image = x_samples.cpu().permute(0, 2, 3, 1).numpy()
+
+                x_checked_image = x_samples.cpu().permute(0, 2, 3, 1).numpy()
 
                 x_checked_image_torch = torch.from_numpy(x_checked_image).permute(0, 3, 1, 2)   #B,C,H,W  
                         
@@ -118,7 +128,7 @@ if __name__ == "__main__":
                 # all_img.append(un_norm(inpaint[0]).cpu())
                 # all_img.append(un_norm_clip(torchvision.transforms.Resize([512,512])(reference)[0].cpu()))
 
-                x_checked_image_torch = torch.nn.functional.interpolate(x_checked_image_torch.float(), size=[512,384])
+                x_checked_image_torch = torch.nn.functional.interpolate(x_checked_image_torch.float(), size=[1024,768])
 
                 
                 all_img.append(x_checked_image_torch[0])
@@ -128,4 +138,10 @@ if __name__ == "__main__":
                 #grid = grid[0]
                 grid = 255. * rearrange(grid, 'c h w -> h w c').cpu().numpy()
                 img = Image.fromarray(grid.astype(np.uint8))
+
+                if opt.version == "vitonhd":
+                    save_path = os.path.join("results/generate_mask", name[0]+".jpg")
+                elif opt.versiom == "dresscode":
+                    save_path = os.path.join("results/generate_mask", category[0], name[0]+".png")
+
                 img.save("results/generate_mask/"+name[0]+".png")

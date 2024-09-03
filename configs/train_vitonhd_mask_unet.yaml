@@ -4,7 +4,7 @@ model:
   target: ldm.models.diffusion.mask_generator.Mask_Unet
   params:
     hint_channel: 6
-    resolution: 256
+    resolution: 512
 
     unet_config:
       target: ldm.modules.diffusionmodules.model.Model
@@ -23,7 +23,7 @@ model:
 data:
   target: train.DataModuleFromConfig
   params:
-      batch_size: 2
+      batch_size: 8
       wrap: False
       train:
           target: ldm.data.mask_vitonhd.OpenImageDataset_Mask
