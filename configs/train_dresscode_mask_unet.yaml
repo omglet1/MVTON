@@ -1,23 +1,15 @@
 #UNet 掩码生成器训练
-#针对dresscode
 model:
   base_learning_rate: 3e-05
-  target: ldm.models.diffusion.mask_generator.MaskLDM
+  target: ldm.models.diffusion.mask_generator.Mask_Unet
   params:
-    linear_start: 0.00085
-    linear_end: 0.0120
-    log_every_t: 200
-    timesteps: 1000
-    image_size: 64
-    channels: 4
-    u_cond_percent: 0.2
-    scale_factore: 0.18215
-    use_ema: False
+    hint_channel: 5
+    resolution: 256
 
     unet_config:
       target: ldm.modules.diffusionmodules.model.Model
       params:
-        ch: 256
+        ch: 128
         in_channels: 128    #TODO:按照是否是扩散模型进行调节
         out_ch: 128
         attn_resolutions: [ 4, 2, 1 ]

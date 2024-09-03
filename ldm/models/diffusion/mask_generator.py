@@ -24,7 +24,7 @@ from ldm.models.diffusion.ddim_mask import DDIMSampler_Mask
 import torch
 from torch.optim.optimizer import Optimizer
 from torch.optim.lr_scheduler import LambdaLR
-
+import pytorch_lightning as pl
 
 def disabled_train(self, mode=True):
     return self
@@ -36,26 +36,33 @@ def disabled_train(self, mode=True):
 # 输入就两个，densepose与garment
 # 网络
 # ===================================================================
-class MaskLDM(DDPM_Mask):
+class Mask_Unet(pl.LightningModule):
     def __init__(self,
-                 run_dm = False,
-                 hint_channel = 3,
-                 resoulution = 512,
+                 unet_config,
+                 hint_channel = 6,
+                 resolution = 512,
                  scale_factore = 1.0,
                  *args, **kwargs):
         #initial  basic model and diffusion paremeters
         self.num_timesteps_cond = 1  #TODO: If wouldn't use, delete
         super().__init__(*args, **kwargs)
-        self.run_dm = run_dm
 
-        self.sigmoid = nn.Sigmoid()
-
-        if run_dm == False:
-            stem_channel = 3 + hint_channel
-        else:
-            stem_channel = hint_channel
+        self.model = instantiate_from_config(unet_config)
+        self.criterion = nn.CrossEntropyLoss()
 
         self.stem = nn.Sequential(
+            nn.Conv2d(3, 64, 7, 2, 3),
+            nn.GroupNorm(32, 64),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, 3, 1, 1),
+            nn.GroupNorm(32, 64),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 128, 3, 1, 1),
+            nn.GroupNorm(32, 128),
+            nn.ReLU(inplace=True),
+            nn.AdaptiveAvgPool2d(resolution // 4))
+        
+        self.stem_hint = nn.Sequential(
             nn.Conv2d(hint_channel, 64, 7, 2, 3),
             nn.GroupNorm(32, 64),
             nn.ReLU(inplace=True),
@@ -65,23 +72,8 @@ class MaskLDM(DDPM_Mask):
             nn.Conv2d(64, 128, 3, 1, 1),
             nn.GroupNorm(32, 128),
             nn.ReLU(inplace=True),
-            nn.AdaptiveAvgPool2d(resoulution // 4))
+            nn.AdaptiveAvgPool2d(resolution // 4))
         
-
-        if self.run_dm == True:
-            self.stem_z = nn.Sequential(
-                nn.Conv2d(1, 32, 7, 2, 3),
-                nn.GroupNorm(32, 32),
-                nn.ReLU(inplace=True),
-                nn.Conv2d(32, 32, 3, 1, 1),
-                nn.GroupNorm(32, 32),
-                nn.ReLU(inplace=True),
-                nn.Conv2d(32, 32, 3, 1, 1),
-                nn.GroupNorm(32, 32),
-                nn.ReLU(inplace=True),
-                nn.AdaptiveAvgPool2d(resoulution // 4)               
-            )
-
         
         self.final_out = nn.Sequential(
             nn.ConvTranspose2d(128, 64, 4, 2, 1, 0),
@@ -93,7 +85,7 @@ class MaskLDM(DDPM_Mask):
             nn.ConvTranspose2d(64, 32, 4, 2, 1, 0),
             nn.GroupNorm(32, 32),
             nn.ReLU(inplace=True),
-            nn.Conv2d(32, 1, 1)
+            nn.Conv2d(32, 2, 1)
         )
 
         #control parameters
@@ -141,64 +133,23 @@ class MaskLDM(DDPM_Mask):
         
     #计算损失
     def forward(self, gt, garment, hint):
-        if self.run_dm == True:
-            loss = self.forward_dm(gt, garment, hint)
-        else:
-            loss = self.forward_unet(gt, garment, hint)
-            return loss
 
-    def forward_unet(self, gt, garment, hint):
-        """
-        gt:      [B,1,H,W]
-        garment: [B,3,H,W]
-        hint:    [B,6,H,W]
-        """
-        x = torch.cat((garment, hint), dim=1)
-        x = self.stem(x)
+        x = self.stem(garment)
+        x = x + self.stem_hint(hint)
         output = self.model(x, timesteps = None, control = None)
         output = self.final_out(output)
-        loss = F.binary_cross_entropy_with_logits(output, gt, reduction='mean')
-        return loss
-    
-    def forward_dm(self, gt, garment, hint):
-        """
-        #暂时搁置
-
-        gt:      [B,1,H,W]
-        garment: [B,3,H,W]
-        hint:    [B,6,H,W]
-        """
-
-        z = self.scale_factor * (gt.sample()).detach()            
-
-        #随机时间 t
-        t = torch.randint(0, self.num_timesteps, (z.shape[0], ), device=self.device).long()
-
-        #随机加噪
-        noise = torch.randn_like(z)
-        z_noise = self.q_sample(x_start=z, t = t, noise = noise)
-        z_noise = torch.cat((z_noise, garment), dim=1)
-        z_noise = self.stem_z(z_noise)
-
-        #处理数据
-        hint = self.stem(hint)
-
-        #预测噪声
-        output = self.model(z_noise, t, hint)
-
-        output = self.final_out(output)
-
-        #计算损失
-        loss = self.get_loss(output, noise)
+        
+        loss = self.criterion(output, gt)
 
         return loss
+
 
     # 优化器
     def configure_optimizers(self):
         # 学习率设置
         lr = self.learning_rate
-        params = list(self.model.parameters())
-        opt = torch.optim.AdamW(params, lr=lr)
+        params =list(self.model.parameters())
+        opt = torch.optim.AdamW(params, lr=lr,betas=(0.9, 0.999), weight_decay=0.01,)
 
         return opt
 
@@ -209,49 +160,15 @@ class MaskLDM(DDPM_Mask):
         garment = garment.to(device)
         hint = hint.to(device)
 
+        x = self.stem(garment)
+        x = x + self.stem_hint(hint)
 
-        if self.run_dm == False:
-            output = self.demo_unet(garment, hint)
-        else:
-            output = self.demo_dm(garment, hint, ddim_steps, ddim_eta)
 
-        output = self.sigmoid(output)
-
-        output = torch.round(output)
-
-        return output, name
-    
-    def demo_unet(self, garment, hint):
-        x = torch.cat((garment, hint), dim=1)
-        x = self.stem(x)
         output = self.model(x, timesteps = None, control = None)
-        output = self.final_out(output)
-        return output
+        output = F.softmax(output, dim=1)
+        output = torch.argmax(output, dim=1, keepdim=True)
+        return output, name
 
-        
-    def demo_dm(self, garment, hint, ddim_steps=50, ddim_eta=0.):
-        ddim_sampler = DDIMSampler_Mask(self)    #TODO:添加扩散模型计划
-        shape = (garment.shape[0], self.channels, self.image_size, self.image_size) 
-        noise = torch.rand_like(shape)
 
-        hint = torch.cat((garment, hint), dim=1)
-
-        samples, __ =ddim_sampler(ddim_steps,
-                                  garment.shape[0],
-                                  noise,
-                                  hint,
-                                  stem = self.stem,
-                                  stem_z = self.stem_z,
-                                  final = self.final_out,
-                                  x_T = noise,
-                                  verbose=False, 
-                                  eta=ddim_eta)
-
-        samples = self.final_out(samples)
-
-        x_samples = 1. / self.scale_factor * samples
-        x_samples = torchvision.transforms.Resize([512, 512])(x_samples)
-
-        return x_samples
 
         
