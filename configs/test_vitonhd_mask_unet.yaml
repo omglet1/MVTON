@@ -36,4 +36,4 @@ lightning:
     num_nodes: 1
     profiler: "simple"
     accelerator: 'ddp'
-    gpus: "0,1"
+    gpus: "0"

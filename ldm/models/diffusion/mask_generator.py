@@ -170,4 +170,3 @@ class Mask_Unet(pl.LightningModule):
         output = F.softmax(output, dim=1)
         output = torch.argmax(output, dim=1, keepdim=True)
         return output, name, category
-
