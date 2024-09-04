@@ -76,10 +76,10 @@ if __name__ == "__main__":
     print(f"{data.__class__.__name__}, {len(data.dataloader)}")
 
     # =============================================================
-    # 加载 model
+    # 加载 model  TODO:是否加载模型参数
     # =============================================================
     model = instantiate_from_config(config.model)
-    model.load_state_dict(torch.load(opt.ckpt, map_location="cpu")["state_dict"], strict=False)
+    #model.load_state_dict(torch.load(opt.ckpt, map_location="cpu")["state_dict"], strict=False)
     model.cuda()
     model.eval()
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
@@ -141,7 +141,7 @@ if __name__ == "__main__":
 
                 if opt.version == "vitonhd":
                     save_path = os.path.join("results/generate_mask", name[0]+".jpg")
-                elif opt.versiom == "dresscode":
+                elif opt.version == "dresscode":
                     save_path = os.path.join("results/generate_mask", category[0], name[0]+".png")
 
                 img.save("results/generate_mask/"+name[0]+".png")

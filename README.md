@@ -8,3 +8,19 @@ Trouble: paired dataset utilize target person and corresponed paired garment wit
 Method: Introducing a exclusive mask generator and multi-value strategy to finish this task.
 
 baseline: CAT-DM
+
+waring:
+
+All preparation follow the guidence of CAT-DM.
+
+
+when you prepare dataset for training, you have to run tools/gt_mask_dresscode.py to generate groundtruth mask for dress code.
+
+python tools/gt_mask_dresscode.py datasets/dresscode/dresses datasets/dresscode/dresses/gt_mask
+
+python tools/gt_mask_dresscode.py datasets/dresscode/lower_body datasets/dresscode/lower_body/gt_mask
+
+python tools/gt_mask_dresscode.py datasets/dresscode/upper_body datasets/dresscode/upper_body/gt_mask
+
+
+In addition, after finishing one stage of training mask generator, the mask generator need to be runed with the target data in order to generate warped garment mask(test stage of mask generator). Next, position these mask to corresponding data path. Finally, you can state the train stage of vton.

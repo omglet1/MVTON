@@ -34,6 +34,7 @@ class OpenImageDataset(data.Dataset):
         with open(self.dataset_file, 'r') as f:
             for line in f.readlines():
                 people, clothes, category = line.strip().split()  #配对文件中，每列分别对应人物、衣物与衣物类别
+                
                 #获取各个衣物所对应的
                 if category == "0":
                     category = "upper_body"
@@ -47,6 +48,7 @@ class OpenImageDataset(data.Dataset):
                 self.people_list.append(people_path)
                 self.clothes_list.append(clothes_path)
                 self.category_list.append(category)
+
 
         
     def __len__(self):
@@ -67,7 +69,7 @@ class OpenImageDataset(data.Dataset):
         dense_path = clothes_path.replace("images", "dense")[:-5] + "5_uv.npz"  #densepose路径
         # /home/sd/zjh/Dataset/DressCode/upper_body/dense/000000_5_uv.npz
 
-        skeleton_path = clothes_path.replace("images", "skeleton")[:-5] + "5.jpg"      #关键点连线图
+        skeleton_path = clothes_path.replace("images", "skeletons")[:-5] + "5.jpg"      #关键点连线图
         #/home/jwliu/MVTON/datasets/dresscode/dresses/skeletons/020714_5.jpg
 
         mask_path = clothes_path.replace("images", "gt_mask")[:-5] + "0.png"  #语义分割标签图（提取GT_mask）
@@ -94,7 +96,7 @@ class OpenImageDataset(data.Dataset):
 
         #skeleton
         skeleton = Image.open(skeleton_path).convert("RGB").resize((512,512))
-        skeleton = torchvision.transforms.ToTensor(skeleton)
+        skeleton = torchvision.transforms.ToTensor()(skeleton)
 
         
         # 正则化
