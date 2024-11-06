@@ -26,5 +26,5 @@ python tools/gt_mask_dresscode.py datasets/dresscode/upper_body datasets/dressco
 In addition, after finishing one stage of training mask generator, the mask generator need to be runed with the target data in order to generate warped garment mask(test stage of mask generator). Next, position these mask to corresponding data path. Finally, you can state the train stage of vton.
 
 **********************************************************************
-Very important thing is that the programme only is a debug code to vertify mu idea whether can achieve a good result or not compared to the original method. Therefor, the programme is a temporary programme, and now it had been deserted.
+#ffffff Very important thing is that the programme only is a debug code to vertify mu idea whether can achieve a good result or not compared to the original method. Therefor, the programme is a temporary programme, and now it had been deserted.
 ***********************************************************************
